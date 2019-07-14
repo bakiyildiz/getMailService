@@ -5,10 +5,8 @@
  */
 package getmailservice;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
 import java.util.Properties;
 import javax.mail.Folder;
@@ -104,21 +102,32 @@ public class GetMailService {
         return strXmlDate;
     }
     
+    static Store emailStore;
+    static Folder emailFolder;
+    
+    public static void getMailServerConnection(String userName, String password, String host) throws MessagingException{
+        Properties properties = new Properties();
+        properties.put("mail.pop3.host", host);
+        properties.put("mail.pop3.port", "995");
+        properties.put("mail.pop3.starttls.enable", "true");
+        properties.put("mail.smtp.debug", "true");
+        Session emailSession = Session.getDefaultInstance(properties);
+        try {
+            emailStore = emailSession.getStore("imaps");
+        } catch (NoSuchProviderException ex) {
+        }
+        emailStore.connect(host,userName,password);
+        emailFolder = emailStore.getFolder("INBOX");
+    }
+    
     public static void getMailInbox(String userName, String password, String host){
         try {
-            Properties properties = new Properties();
-            properties.setProperty("mail.store.protocol","imaps");
-            Session emailSession = Session.getDefaultInstance(properties);
-            Store emailStore = emailSession.getStore("pop3");
-            //try {
-                emailStore.connect(host,userName,password);
-            //} catch (Exception e) {
-           //     System.out.println("Exx: " + e);
-            //}
             
+            if(emailStore == null || !emailStore.isConnected()){
+                getMailServerConnection(userName,password,host);
+            }
             
-            Folder emailFolder = emailStore.getFolder("INBOX");
-            emailFolder.open(Folder.READ_ONLY);
+            emailFolder.open(Folder.READ_WRITE);
             Message messages[] = emailFolder.getMessages();
             Message message;
             
@@ -137,25 +146,18 @@ public class GetMailService {
                     System.out.println(format);
                     System.out.println(message.getSubject().toString());
                     
-//                    if(parts[parts.length-1].equals(getConfigData("appSettings","privateMailAddress"))){                        
-//                        log(message.getSubject());
-                        runXmlCreateService(parts[parts.length-1].toString(), message.getSubject().toString(),format);
-//                    }
-                    
-//                    System.out.println("Email Number: " + (i+1));
-//                    System.out.println("Konu: " + message.getSubject());
-//                    System.out.println("Kimden: " + message.getFrom()[0]);
-//                    System.out.println("Gönderi Tarihi: " + message.getSentDate());
-                }
-                
-               
+                    runXmlCreateService(parts[parts.length-1].toString(), message.getSubject().toString(),format);
+                }               
             }
-            
-            emailFolder.close(false);
-            emailStore.close();
             
             if(messages.length > 0){
                 deleteAllMail(userName, password, host);
+            }else{
+                if(emailFolder.isOpen())
+                    emailFolder.close(false);
+                
+                if(emailStore.isConnected())
+                    emailStore.close();
             }
             
         } catch(NoSuchProviderException nspe){
@@ -167,7 +169,7 @@ public class GetMailService {
         } catch(MessagingException me){
             System.out.println("asd2");
             try {
-                //Process pro = Runtime.getRuntime().exec("java -jar xmlCreator.jar exception getMailService EX_5 " + me); // Çok loglama yaptığından kapatıldı
+                Process pro = Runtime.getRuntime().exec("java -jar xmlCreator.jar exception getMailService EX_5 " + me);
             } catch (Exception ex) {          
             }
         } catch (Exception e) {
@@ -179,50 +181,37 @@ public class GetMailService {
         }
     }
     
-    public static void deleteAllMail(String userName, String password, String host){
-        try 
-      {
-         Properties properties = new Properties();
-         properties.put("mail.store.protocol", "imap");
-         properties.put("mail.pop3s.host", host);
-         properties.put("mail.pop3s.port", "993");
-         properties.put("mail.pop3.starttls.enable", "true");
-                  
-         Session emailSession = Session.getDefaultInstance(properties);
-                 
-         Store store = emailSession.getStore("imap");
-
-         store.connect(host, userName, password);
-
-         Folder emailFolder = store.getFolder("INBOX");
-         emailFolder.open(Folder.READ_WRITE);
-
-         BufferedReader reader = new BufferedReader(new InputStreamReader(
-            System.in));
-         
-         Message[] messages = emailFolder.getMessages();
-         for (int i = 0; i < messages.length; i++) {
-            Message message = messages[i];
+    public static void deleteAllMail(String userName, String password, String host){        
+        try {
+            if(emailStore == null || !emailStore.isConnected()){
+                getMailServerConnection(userName,password,host);
+            }
+                
+            Message[] messages = emailFolder.getMessages();
+            for (int i = 0; i < messages.length; i++) {
+               Message message = messages[i];
+               message.setFlag(Flags.Flag.DELETED, true);
+            }
+            
+            if(emailFolder.isOpen())
+                emailFolder.close(true);
                         
-            message.setFlag(Flags.Flag.DELETED, true);
-         }
+            if(emailStore.isConnected())
+                emailStore.close();            
          
-         emailFolder.close(true);
-         store.close();
-         
-      } catch (NoSuchProviderException e) {
+        } catch (NoSuchProviderException e) {
             try {
                 Process pro = Runtime.getRuntime().exec("java -jar xmlCreator.jar exception getMailService EX_7 " + e);
             } catch (Exception ex) {          
             }
-         e.printStackTrace();
-      } catch (MessagingException e) {
+            e.printStackTrace();
+        } catch (MessagingException e) {
             try {
                 Process pro = Runtime.getRuntime().exec("java -jar xmlCreator.jar exception getMailService EX_8 " + e);
             } catch (Exception ex) {          
             }
-         e.printStackTrace();
-      } catch(Exception e){
+             e.printStackTrace();
+        } catch(Exception e){
             try {
                 Process pro = Runtime.getRuntime().exec("java -jar xmlCreator.jar exception getMailService EX_9 " + e);
             } catch (Exception ex) {          
@@ -239,6 +228,5 @@ public class GetMailService {
             } catch (Exception exe) {          
             }        
         }
-    }
-    
+    }    
 }
